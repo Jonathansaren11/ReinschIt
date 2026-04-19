@@ -9,6 +9,15 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+      - name: Build backend binary
+        working-directory: ./backend
+        run: |
+          go mod download
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o reinschit-backend .
       - name: Set up SSH key
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -19,7 +28,17 @@ jobs:
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H "$SERVER_IP" >> ~/.ssh/known_hosts
-      - name: Deploy Hello World
+      - name: Copy backend to server
+        env:
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+        run: |
+          rsync -avz ./backend/reinschit-backend ubuntu@"$SERVER_IP":~/reinschit-backend-new
+      - name: Deploy and restart service
+        env:
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+        run: |
+          ssh ubuntu@"$SERVER_IP" "sudo systemctl stop reinschit-backend || true && cp ~/reinschit-backend-new ~/reinschit-backend && chmod +x ~/reinschit-backend && sudo systemctl start reinschit-backend"
+      - name: Deploy Hello World frontend
         env:
           SERVER_IP: ${{ secrets.SERVER_IP }}
         run: |
